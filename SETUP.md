@@ -413,7 +413,138 @@ The WebSocket route has **no JWT filter** at the gateway — it connects without
 
 ---
 
-## Production Build
+## Docker Deployment
+
+### Files
+
+| File | Purpose |
+|------|---------|
+| `iot-frontend/Dockerfile` | Multi-stage build: Node 20 (build) + nginx (serve) |
+| `iot-frontend/nginx.conf` | Proxies `/api/*` and `/api/ws` to `api-gateway`, SPA fallback for all other routes |
+| `iot-frontend/.dockerignore` | Excludes `node_modules`, `dist`, `.git` from build context |
+| `iot-backend/docker-compose.yml` | Full stack — databases + backend services + frontend |
+
+### Docker Architecture
+
+```
+                    Host :3000
+                        │
+              ┌─────────▼─────────┐
+              │   iot-frontend     │
+              │   (nginx :80)     │
+              │                    │
+              │  /api/* ──────────►├──── api-gateway:8080
+              │  /api/ws ─────────►├──── api-gateway:8080 (WebSocket upgrade)
+              │  /* ──────────────►│──── /usr/share/nginx/html/index.html
+              └────────────────────┘
+                        │
+         ┌──────────────┼──────────────┐
+         ▼              ▼              ▼
+   auth-service   device-service  weather-service
+     :8081          :8082            :8084
+         │              │
+         ▼              ▼
+      auth-db       device-db
+    (PG :5432)     (PG :5432)
+```
+
+### Run the Full Stack
+
+**1. Build the backend JARs first** (required — backend Dockerfiles copy pre-built JARs):
+
+```bash
+cd iot-backend
+mvn clean install -DskipTests
+```
+
+**2. Start everything:**
+
+```bash
+cd iot-backend
+WEATHER_API_KEY=your_key_here docker compose up --build -d
+```
+
+**3. Check status:**
+
+```bash
+docker compose ps
+```
+
+All 8 containers should be running:
+
+| Container | Image | Port |
+|-----------|-------|------|
+| auth-db | postgres:16-alpine | 5432 |
+| device-db | postgres:16-alpine | 5433 |
+| discovery-server | iot-backend-discovery-server | 8761 |
+| api-gateway | iot-backend-api-gateway | 8080 |
+| auth-service | iot-backend-auth-service | 8081 |
+| device-service | iot-backend-device-service | 8082 |
+| weather-service | iot-backend-weather-service | 8084 |
+| iot-frontend | iot-backend-iot-frontend | 3000 |
+
+**4. Open the app:** http://localhost:3000
+
+### Run Frontend Separately
+
+If you want to run only the frontend container (backend already running on host):
+
+```bash
+cd iot-frontend
+docker build -t iot-frontend .
+docker run -p 3000:80 --network host iot-frontend
+```
+
+> With `--network host`, nginx resolves `api-gateway` to `localhost`. If the gateway is on a different host, edit `nginx.conf` and replace `api-gateway` with the actual hostname/IP.
+
+### Startup Order
+
+Docker Compose handles the startup order via `depends_on`:
+
+```
+auth-db, device-db          (start first, healthcheck: pg_isready)
+         │
+    discovery-server         (start after DBs, healthcheck: /actuator/health)
+         │
+    ┌────┼────┬──────────┐
+    ▼    ▼    ▼          ▼
+  auth  device weather  api-gateway
+    │    │     │         │
+    └────┴─────┴─────────┘
+              │
+        iot-frontend        (start after api-gateway)
+```
+
+### Stop and Clean Up
+
+```bash
+# Stop all containers
+cd iot-backend
+docker compose down
+
+# Stop and remove volumes (deletes all database data)
+docker compose down -v
+```
+
+### Rebuild After Code Changes
+
+```bash
+# Frontend only
+docker compose up --build iot-frontend -d
+
+# Backend service (e.g. device-service) — rebuild JAR first
+cd iot-backend
+mvn clean install -DskipTests -pl device-service -am
+docker compose up --build device-service -d
+
+# Everything
+mvn clean install -DskipTests
+docker compose up --build -d
+```
+
+---
+
+## Production Build (Without Docker)
 
 ```bash
 cd iot-frontend
@@ -434,5 +565,8 @@ Output goes to `dist/`. Serve with any static file server, or configure your gat
 | WebSocket won't connect | Ensure device-service is running and registered in Eureka. Check `/api/ws` route. |
 | Weather shows nothing | Set `WEATHER_API_KEY` env var on weather-service. Allow browser geolocation when prompted. |
 | Database connection refused | Start PostgreSQL or run `docker compose up auth-db device-db -d`. |
-| CORS errors | Should not happen with Vite proxy. If building for production, configure CORS on the gateway. |
+| CORS errors | Should not happen with Vite proxy or nginx proxy. In production, configure CORS on the gateway. |
 | Login returns snake_case error | This is expected — the axios interceptor auto-converts responses to camelCase. |
+| Docker build fails on backend | Run `mvn clean install -DskipTests` first — backend Dockerfiles need pre-built JARs. |
+| Frontend container shows 502 | The `api-gateway` container is not ready yet. Wait for Eureka to register all services. |
+| WebSocket 504 in Docker | Ensure `proxy_read_timeout` is high in `nginx.conf` (set to 86400s by default). |
