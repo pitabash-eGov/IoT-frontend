@@ -455,6 +455,181 @@ Output goes to `dist/`. Serve with any static file server and proxy `/api` to th
 
 ---
 
+## Frontend Docker Compose
+
+The `docker-compose.yml` in this directory builds and runs **only the frontend** container. Use it when you want to deploy the frontend independently from the backend stack.
+
+### Prerequisites
+
+- Docker and Docker Compose installed
+- Backend services running via `iot-backend/docker-compose.yml` (the frontend container joins the backend's default network to reach `api-gateway`)
+
+---
+
+### Running Locally (Development / Testing)
+
+Use this to test the production Docker image on your local machine.
+
+**1. Start the backend first** (this creates the `iot-backend_default` network):
+
+```bash
+cd iot-backend
+WEATHER_API_KEY=your_key_here docker compose up --build -d
+```
+
+> The frontend compose references the backend's default network (`iot-backend_default`) as an external network. The backend must be running before starting the frontend.
+
+**3. Build and start the frontend:**
+
+```bash
+cd iot-frontend
+docker compose up --build -d
+```
+
+**4. Open the app:** http://localhost
+
+**5. View logs:**
+
+```bash
+docker compose logs -f iot-frontend
+```
+
+**6. Stop:**
+
+```bash
+docker compose down
+```
+
+---
+
+### Deploying to a Server
+
+**1. SSH into your server and clone the repo:**
+
+```bash
+git clone <your-repo-url>
+cd iot-frontend
+```
+
+**2. Start the backend** (must be running first — it creates the `iot-backend_default` network):
+
+```bash
+cd iot-backend
+WEATHER_API_KEY=your_key_here docker compose up --build -d
+```
+
+**3. (Optional) Update `nginx.conf` for your domain:**
+
+If you're serving behind a reverse proxy or using a custom domain, update the `server_name` directive:
+
+```nginx
+server_name yourdomain.com;
+```
+
+If the API gateway is on a different host/IP, update the `proxy_pass` directives:
+
+```nginx
+proxy_pass http://<gateway-host>:8080/api/;
+```
+
+**4. Build and start:**
+
+```bash
+docker compose up --build -d
+```
+
+**5. Verify it's running:**
+
+```bash
+docker compose ps
+```
+
+Expected output:
+
+```
+NAME            IMAGE                    STATUS         PORTS
+iot-frontend    iot-frontend-iot-frontend Up (healthy)   0.0.0.0:80->80/tcp
+```
+
+**6. (Optional) Change the host port:**
+
+If port 80 is already in use, edit `docker-compose.yml`:
+
+```yaml
+ports:
+  - "3000:80"   # or any available port
+```
+
+Then restart:
+
+```bash
+docker compose up -d
+```
+
+---
+
+### With HTTPS (Production)
+
+For production, place a reverse proxy (e.g., Nginx, Caddy, Traefik) in front of the frontend container to handle SSL termination.
+
+**Example with Caddy** (automatic HTTPS):
+
+```bash
+# Caddyfile
+yourdomain.com {
+    reverse_proxy localhost:80
+}
+```
+
+**Example with Nginx** (host-level):
+
+```nginx
+server {
+    listen 443 ssl;
+    server_name yourdomain.com;
+
+    ssl_certificate     /etc/letsencrypt/live/yourdomain.com/fullchain.pem;
+    ssl_certificate_key /etc/letsencrypt/live/yourdomain.com/privkey.pem;
+
+    location / {
+        proxy_pass http://localhost:80;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+    }
+
+    # WebSocket upgrade
+    location /api/ws {
+        proxy_pass http://localhost:80;
+        proxy_http_version 1.1;
+        proxy_set_header Upgrade $http_upgrade;
+        proxy_set_header Connection "upgrade";
+    }
+}
+```
+
+---
+
+### Rebuild After Frontend Changes
+
+```bash
+cd iot-frontend
+docker compose up --build -d
+```
+
+### Docker Compose Reference
+
+| Setting | Value | Description |
+|---------|-------|-------------|
+| Service name | `iot-frontend` | Container name |
+| Build context | `.` (current dir) | Uses `./Dockerfile` |
+| Host port | `80` | Mapped to container port 80 |
+| Network | `iot-backend_default` (external) | Joins the backend's default Docker Compose network |
+| Restart policy | `unless-stopped` | Auto-restart on crash or reboot |
+
+---
+
 ## Troubleshooting
 
 | Problem | Solution |
@@ -469,3 +644,7 @@ Output goes to `dist/`. Serve with any static file server and proxy `/api` to th
 | Docker build fails on backend | Run `mvn clean install -DskipTests` first — Dockerfiles need pre-built JARs. |
 | Frontend container shows 502 | Gateway not ready yet. Wait for Eureka to register all services. |
 | WebSocket 504 in Docker | Check `proxy_read_timeout` in `nginx.conf` (default: 86400s). |
+| `iot-backend_default` not found | Start the backend first: `cd iot-backend && docker compose up -d`. The network is created automatically. |
+| Frontend can't reach `api-gateway` | Ensure backend is running and both are on `iot-backend_default`. Verify with `docker network inspect iot-backend_default`. |
+| Port 80 already in use | Change the host port in `docker-compose.yml`: `"3000:80"` instead of `"80:80"`. |
+| Changes not reflected after rebuild | Run `docker compose up --build -d` (the `--build` flag is required to rebuild the image). |

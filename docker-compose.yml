@@ -1,0 +1,16 @@
+services:
+  iot-frontend:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: iot-frontend
+    ports:
+      - "80:80"
+    networks:
+      - backend-network
+    restart: unless-stopped
+
+networks:
+  backend-network:
+    external: true
+    name: iot-backend_default
