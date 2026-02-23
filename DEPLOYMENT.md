@@ -16,7 +16,7 @@
      │                  │     │                   │
      │  Runs:           │     │  Connects via:    │
      │  - Backend stack │     │  - SSH (setup)    │
-     │  - Frontend :80  │     │  - Browser :80    │
+     │  - Frontend :3000│     │  - Browser :3000  │
      └──────────────────┘     └───────────────────┘
 ```
 
@@ -149,22 +149,23 @@ Expected output:
 
 ### Step 3: Configure Firewall
 
-```bash
-# Allow frontend port (if not already allowed)
-sudo ufw allow 80/tcp
+Port 3000 is already allowed from the backend deployment — no additional firewall rules needed.
 
-# Verify
+Verify:
+
+```bash
 sudo ufw status
 ```
 
-Expected:
+Expected (already configured):
 
 ```
 To                         Action      From
 --                         ------      ----
 22/tcp                     ALLOW       Anywhere
-80/tcp                     ALLOW       Anywhere
+3000/tcp                   ALLOW       Anywhere
 8080/tcp                   ALLOW       Anywhere
+8761/tcp                   ALLOW       Anywhere
 ```
 
 ### Step 4: Build Docker Image and Start Container
@@ -181,7 +182,7 @@ This will:
 2. Copy the production build into an Nginx Alpine container
 3. Apply the `nginx.conf` for API proxying and SPA routing
 4. Join the `iot-backend_default` Docker network
-5. Start serving on port 80
+5. Start serving on port 3000 (mapped to nginx port 80 inside the container)
 
 ### Step 5: Monitor Startup
 
@@ -197,18 +198,18 @@ Expected output:
 
 ```
 NAME             STATUS    PORTS
-iot-frontend     Up        0.0.0.0:80->80/tcp
+iot-frontend     Up        0.0.0.0:3000->80/tcp
 ```
 
 ### Step 6: Verify Deployment (from SSH session)
 
 ```bash
 # Check frontend is serving
-curl -s -o /dev/null -w "%{http_code}" http://localhost:80
+curl -s -o /dev/null -w "%{http_code}" http://localhost:3000
 # Expected: 200
 
 # Check API proxy is working
-curl -s http://localhost/api/auth/login \
+curl -s http://localhost:3000/api/auth/login \
   -X POST \
   -H "Content-Type: application/json" \
   -d '{"email":"pitabash@example.com","password":"password123"}'
@@ -224,7 +225,7 @@ Open a browser on your **Client PC** and navigate to:
 ### Frontend (Web UI)
 
 ```
-http://192.168.x.100
+http://192.168.x.100:3000
 ```
 
 ### Default Test Users
@@ -377,16 +378,13 @@ cd ~/iot-frontend
 docker compose up -d --build
 ```
 
-### Port 80 already in use
+### Port 3000 already in use
 
 ```bash
-# Check what's using port 80
-sudo ss -tlnp | grep :80
+# Check what's using port 3000
+sudo ss -tlnp | grep :3000
 
-# If Apache is running, stop it
-sudo systemctl stop apache2
-sudo systemctl disable apache2
-
+# Kill the process or change the port mapping in docker-compose.yml
 # Restart frontend
 docker compose up -d
 ```
@@ -439,7 +437,7 @@ docker compose logs -f
 
 ### Access URL (from client browser)
 ```
-http://192.168.x.100
+http://192.168.x.100:3000
 ```
 
 ---
@@ -448,10 +446,10 @@ http://192.168.x.100
 
 | Port | Service         | Exposed to Network? | Purpose                    |
 |------|-----------------|---------------------|----------------------------|
-| 80   | Frontend (nginx)| Yes                 | Web UI + API proxy         |
+| 3000 | Frontend (nginx)| Yes                 | Web UI + API proxy         |
 | 8080 | API Gateway     | Yes (via backend)   | Direct API access          |
 
-> All API traffic from the browser goes through port 80 (nginx proxies `/api/*` to the gateway internally).
+> All API traffic from the browser goes through port 3000 (nginx proxies `/api/*` to the gateway internally).
 
 ---
 
@@ -495,9 +493,9 @@ cd ~/iot-frontend
 docker compose up -d --build
 
 # 6. Verify
-curl -s http://localhost/api/auth/login \
+curl -s http://localhost:3000/api/auth/login \
   -X POST -H "Content-Type: application/json" \
   -d '{"email":"pitabash@example.com","password":"password123"}'
 ```
 
-Access from browser: `http://192.168.x.100`
+Access from browser: `http://192.168.x.100:3000`
