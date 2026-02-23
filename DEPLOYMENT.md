@@ -26,7 +26,7 @@
 
 ## Prerequisites
 
-- **Backend must be deployed first** — the frontend Docker container joins the backend's Docker network (`iot-backend_default`) and proxies API requests to `api-gateway:8080`
+- **Backend must be deployed first** — the frontend Docker container joins the backend's Docker network (`iotbackend_default`) and proxies API requests to `api-gateway:8080`
 - Ubuntu Server with Docker and Docker Compose already installed (see [iot-backend DEPLOYMENT.md](../iot-backend/DEPLOYMENT.md) for PHASE 1–3)
 - SSH access to the server
 
@@ -36,7 +36,7 @@
 
 ```
 ┌─────────────────────────────────────────────────────────┐
-│  Docker Network: iot-backend_default                    │
+│  Docker Network: iotbackend_default                    │
 │                                                         │
 │  ┌───────────────┐          ┌────────────────────────┐  │
 │  │ iot-frontend   │  /api/  │  api-gateway           │  │
@@ -127,13 +127,13 @@ All backend containers should show `Up` (especially `api-gateway`).
 Verify the network exists:
 
 ```bash
-docker network ls | grep iot-backend_default
+docker network ls | grep iotbackend_default
 ```
 
 Expected output:
 
 ```
-<network-id>   iot-backend_default   bridge    local
+<network-id>   iotbackend_default   bridge    local
 ```
 
 > If the backend is not running, start it first:
@@ -198,7 +198,7 @@ This will:
 1. Build the React app using Node 20 Alpine (multi-stage build)
 2. Copy the production build into an Nginx Alpine container
 3. Apply the `nginx.conf` for API proxying and SPA routing
-4. Join the `iot-backend_default` Docker network
+4. Join the `iotbackend_default` Docker network
 5. Start serving on port 3000 (mapped to nginx port 80 inside the container)
 
 ### Step 5: Monitor Startup
@@ -364,7 +364,7 @@ The frontend cannot reach the `api-gateway` container. Check:
 cd ~/iot-backend && docker compose ps
 
 # 2. Frontend is on the same network
-docker network inspect iot-backend_default | grep iot-frontend
+docker network inspect iotbackend_default | grep iot-frontend
 
 # 3. api-gateway is reachable from frontend container
 docker exec iot-frontend wget -qO- http://api-gateway:8080/actuator/health
@@ -380,13 +380,13 @@ docker exec iot-frontend cat /etc/nginx/conf.d/default.conf
 docker exec iot-frontend wget -qO- http://api-gateway:8080/api/ws/info
 ```
 
-### Network iot-backend_default not found
+### Network iotbackend_default not found
 
 ```
-ERROR: Network iot-backend_default declared as external, but could not be found.
+ERROR: Network iotbackend_default declared as external, but could not be found.
 ```
 
-This means the backend containers are not running yet. The frontend's `docker-compose.yml` uses the backend's Docker network (`iot-backend_default`), which is created automatically when the backend starts.
+This means the backend containers are not running yet. The frontend's `docker-compose.yml` uses the backend's Docker network (`iotbackend_default`), which is created automatically when the backend starts.
 
 **Fix — Option A: Start the backend first (recommended)**
 
@@ -404,7 +404,7 @@ docker compose up -d --build
 If you want to start the frontend without the backend (e.g., for testing):
 
 ```bash
-docker network create iot-backend_default
+docker network create iotbackend_default
 
 # Then start frontend
 cd ~/iot-frontend

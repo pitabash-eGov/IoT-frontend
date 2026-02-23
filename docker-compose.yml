@@ -13,4 +13,4 @@ services:
 networks:
   backend-network:
     external: true
-    name: iot-backend_default
+    name: iotbackend_default
