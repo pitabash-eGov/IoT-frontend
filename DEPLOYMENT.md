@@ -380,20 +380,38 @@ docker exec iot-frontend cat /etc/nginx/conf.d/default.conf
 docker exec iot-frontend wget -qO- http://api-gateway:8080/api/ws/info
 ```
 
-### Frontend not joining backend network
+### Network iot-backend_default not found
+
+```
+ERROR: Network iot-backend_default declared as external, but could not be found.
+```
+
+This means the backend containers are not running yet. The frontend's `docker-compose.yml` uses the backend's Docker network (`iot-backend_default`), which is created automatically when the backend starts.
+
+**Fix — Option A: Start the backend first (recommended)**
 
 ```bash
-# Verify network exists
-docker network ls | grep iot-backend_default
-
-# If not, start backend first
 cd ~/iot-backend
 docker compose up -d --build
 
-# Then restart frontend
+# Then start frontend
 cd ~/iot-frontend
 docker compose up -d --build
 ```
+
+**Fix — Option B: Create the network manually**
+
+If you want to start the frontend without the backend (e.g., for testing):
+
+```bash
+docker network create iot-backend_default
+
+# Then start frontend
+cd ~/iot-frontend
+docker compose up -d --build
+```
+
+> **Note:** With Option B the frontend will serve the UI, but API calls will fail until the backend is started.
 
 ### Port 3000 already in use
 
