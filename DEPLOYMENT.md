@@ -168,6 +168,23 @@ To                         Action      From
 8761/tcp                   ALLOW       Anywhere
 ```
 
+### Changing the Frontend Port (Optional)
+
+The default port is `3000`. To use a different port (e.g., `8090`), update `docker-compose.yml`:
+
+```yaml
+ports:
+  - "8090:80"    # change 8090 to your desired port
+```
+
+Then allow it in the firewall:
+
+```bash
+sudo ufw allow 8090/tcp
+```
+
+> Remember to use the new port in all URLs (e.g., `http://192.168.x.100:8090`).
+
 ### Step 4: Build Docker Image and Start Container
 
 ```bash
@@ -450,6 +467,8 @@ http://192.168.x.100:3000
 | 8080 | API Gateway     | Yes (via backend)   | Direct API access          |
 
 > All API traffic from the browser goes through port 3000 (nginx proxies `/api/*` to the gateway internally).
+>
+> **Note:** The frontend port (3000) can be changed in `docker-compose.yml` — see [Changing the Frontend Port](#changing-the-frontend-port-optional).
 
 ---
 
